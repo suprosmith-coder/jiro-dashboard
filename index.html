@@ -993,13 +993,16 @@ input[type=range]::-webkit-slider-thumb {
 <div id="toast"></div>
 
 <script>
-// ── Add your anon key to CONFIG ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════
+//  CONFIG  —  fill in your values
+// ═══════════════════════════════════════════════
 const CONFIG = {
-  CLIENT_ID:    '1487252546060947476',
-  REDIRECT_URI:  window.location.origin + window.location.pathname,
-  SCOPES:       'identify',
-  API_BASE:     'https://hfxagwcwaalrmaqzhyfj.supabase.co',
-  ANON_KEY:     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmeGFnd2N3YWFscm1hcXpoeWZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MzY5NzIsImV4cCI6MjA5MDIxMjk3Mn0.LMFfFRmqW34PT70zAOTj4zsUWmrDl_P4MXL0wZBkxYc',   // ← add this
+  CLIENT_ID:   '1487252546060947476',
+  REDIRECT_URI: window.location.origin + window.location.pathname,
+  SCOPES:      'identify guilds',
+  API_BASE:    'https://hfxagwcwaalrmaqzhyfj.supabase.co',
+  // Your Supabase anon/public key — safe to expose in frontend
+  ANON_KEY:    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmeGFnd2N3YWFscm1hcXpoeWZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MzY5NzIsImV4cCI6MjA5MDIxMjk3Mn0.LMFfFRmqW34PT70zAOTj4zsUWmrDl_P4MXL0wZBkxYc',
 };
 
 // ═══════════════════════════════════════════════
@@ -1049,8 +1052,10 @@ function startOAuth() {
 
 async function handleOAuthCallback(code, returnedState) {
   const savedState = sessionStorage.getItem('oauth_state');
-  if (savedState && returnedState !== savedState) {
+  // Only enforce state check if we actually stored one and Discord returned one
+  if (savedState && returnedState && returnedState !== savedState) {
     sessionStorage.removeItem('oauth_state');
+    console.error('OAuth state mismatch — possible CSRF');
     return false;
   }
   setLoadingMsg('Exchanging auth code...');
@@ -1062,12 +1067,19 @@ async function handleOAuthCallback(code, returnedState) {
     });
     window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
     sessionStorage.removeItem('oauth_state');
-    if (!res.ok) return false;
+    if (!res.ok) {
+      console.error('discord-oauth function returned', res.status, await res.text().catch(()=>''));
+      return false;
+    }
     const data = await res.json();
-    if (!data.access_token) return false;
+    if (!data.access_token) {
+      console.error('discord-oauth: no access_token in response', data);
+      return false;
+    }
     localStorage.setItem('jiro_token', data.access_token);
     return true;
-  } catch {
+  } catch (err) {
+    console.error('handleOAuthCallback error:', err);
     window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
     sessionStorage.removeItem('oauth_state');
     return false;
@@ -1102,8 +1114,17 @@ async function boot() {
   state.token = token;
 
   setLoadingMsg('Loading your profile...');
-  try { await loadUser(); }
-  catch { localStorage.removeItem('jiro_token'); hideLoading(); showLogin(); return; }
+  try {
+    await loadUser();
+  } catch (err) {
+    // Only wipe token & go to login if it's a genuine 401 (token expired)
+    // Network errors / Discord downtime should NOT log the user out
+    if (err.message && err.message.includes('expired')) {
+      hideLoading(); showLogin(); return;
+    }
+    console.warn('loadUser failed (non-auth error):', err);
+    // Continue anyway — guilds might still work
+  }
 
   setLoadingMsg('Fetching your servers...');
   try { await loadGuilds(); }
@@ -1125,17 +1146,17 @@ function showApp() {
 // ═══════════════════════════════════════════════
 //  API HELPERS
 // ═══════════════════════════════════════════════
-async function supabaseApi(path, opts = {}) {
-  const res = await fetch(`${CONFIG.API_BASE}${path}`, {
-    ...opts,
-    headers: {
-      'Authorization': `Bearer ${CONFIG.ANON_KEY}`,  // ← Supabase anon key, not Discord token
-      'Content-Type':  'application/json',
-      ...(opts.headers || {}),
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
+async function discordApi(path) {
+  const res = await fetch(`https://discord.com/api/v10${path}`, {
+    headers: { 'Authorization': `Bearer ${state.token}` },
   });
-  if (!res.ok) throw new Error(`API ${res.status}`);
+  if (res.status === 401) {
+    // Token is genuinely expired/invalid — clear it and redirect to login
+    localStorage.removeItem('jiro_token');
+    showLogin();
+    throw new Error('Discord token expired');
+  }
+  if (!res.ok) throw new Error(`Discord API ${res.status}`);
   return res.json();
 }
 
@@ -1143,14 +1164,18 @@ async function supabaseApi(path, opts = {}) {
   const res = await fetch(`${CONFIG.API_BASE}${path}`, {
     ...opts,
     headers: {
-      'Authorization': `Bearer ${state.token}`,
+      // Supabase needs its own anon key here — NOT the Discord user token
+      'Authorization': `Bearer ${CONFIG.ANON_KEY}`,
+      'apikey':        CONFIG.ANON_KEY,
       'Content-Type':  'application/json',
       ...(opts.headers || {}),
     },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
-  if (res.status === 401) { logout(); throw new Error('Unauthorized'); }
-  if (!res.ok) throw new Error(`API ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API ${res.status}: ${text}`);
+  }
   return res.json();
 }
 
@@ -1173,10 +1198,23 @@ async function loadUser() {
 }
 
 async function loadGuilds() {
-  const data = await supabaseApi('/functions/v1/bot-guilds', {
-    method: 'POST',
-    body: { access_token: state.token },
-  });
+  let data;
+  try {
+    data = await supabaseApi('/functions/v1/bot-guilds', {
+      method: 'POST',
+      body: { access_token: state.token },
+    });
+  } catch (err) {
+    console.error('loadGuilds API error:', err);
+    return; // silently — openGuildModal will show "No servers found"
+  }
+
+  if (data && data.error) {
+    console.warn('bot-guilds edge function error:', data.error);
+    state.guilds = [];
+    return;
+  }
+
   state.guilds = Array.isArray(data) ? data : (data.guilds || []);
 
   // Auto-select if only one guild
