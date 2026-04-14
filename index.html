@@ -343,12 +343,113 @@
     .stats-grid { grid-template-columns: 1fr; }
     .field-row { grid-template-columns: 1fr; }
   }
+
+  /* ── CANVAS BACKGROUND ── */
+  #bg-canvas {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0; opacity: .55;
+  }
+
+  /* ── LOADING SCREEN ── */
+  #loading-screen {
+    position: fixed; inset: 0; z-index: 9000;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg);
+    transition: opacity .5s ease;
+  }
+  #loading-screen.fade-out { opacity: 0; pointer-events: none; }
+
+  .loading-inner { display: flex; flex-direction: column; align-items: center; gap: 28px; }
+  #loading-msg { font-size: 13px; color: var(--muted); letter-spacing: .5px; }
+
+  /* ── ATOM LOADER (loading screen) ── */
+  .atom-loader {
+    position: relative; width: 80px; height: 80px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .nucleus {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, var(--accent2), var(--accent));
+    box-shadow: 0 0 16px var(--accent), 0 0 32px rgba(88,101,242,.4);
+    animation: pulse-nucleus 2s ease-in-out infinite;
+    position: relative; z-index: 2;
+  }
+  @keyframes pulse-nucleus {
+    0%,100% { transform: scale(1); box-shadow: 0 0 16px var(--accent), 0 0 32px rgba(88,101,242,.4); }
+    50%      { transform: scale(1.2); box-shadow: 0 0 24px var(--accent2), 0 0 48px rgba(0,191,255,.5); }
+  }
+  .orbit {
+    position: absolute; border-radius: 50%;
+    border: 1.5px solid rgba(88,101,242,.35);
+    display: flex; align-items: flex-start; justify-content: center;
+  }
+  .orbit-1 { width: 46px; height: 46px; animation: spin 2.4s linear infinite; }
+  .orbit-2 { width: 66px; height: 66px; animation: spin 3.6s linear infinite reverse; transform: rotate(60deg); }
+  .orbit-3 { width: 86px; height: 86px; animation: spin 5s linear infinite; transform: rotate(120deg); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .orbit-2 { animation: spin2 3.6s linear infinite; }
+  .orbit-3 { animation: spin3 5s linear infinite; }
+  @keyframes spin2 { from { transform: rotate(60deg); } to { transform: rotate(420deg); } }
+  @keyframes spin3 { from { transform: rotate(120deg); } to { transform: rotate(480deg); } }
+
+  .electron {
+    width: 6px; height: 6px; border-radius: 50%; margin-top: -3px;
+    background: var(--accent2);
+    box-shadow: 0 0 8px var(--accent2), 0 0 16px rgba(0,191,255,.6);
+    animation: electron-glow 1.5s ease-in-out infinite alternate;
+  }
+  .orbit-1 .electron { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .orbit-3 .electron { background: #a78bfa; box-shadow: 0 0 8px #a78bfa; }
+  @keyframes electron-glow {
+    from { opacity: .7; transform: scale(.9); }
+    to   { opacity: 1;  transform: scale(1.2); }
+  }
+
+  /* ── BACKGROUND ATOM RINGS (decorative, on app bg) ── */
+  .bg-atom {
+    position: fixed; border-radius: 50%; pointer-events: none; z-index: 0;
+  }
+  .bg-ring {
+    position: absolute; border-radius: 50%;
+    border: 1px solid rgba(88,101,242,.08);
+    animation: bg-spin linear infinite;
+  }
+  @keyframes bg-spin { to { transform: rotate(360deg); } }
+  .bg-atom-dot {
+    position: absolute; border-radius: 50%; top: 0; left: 50%;
+    margin-left: -3px; margin-top: -3px;
+    width: 6px; height: 6px;
+    background: rgba(88,101,242,.4);
+    box-shadow: 0 0 10px rgba(88,101,242,.5);
+  }
+
+  /* ── LOGIN SCREEN ATOM (decorative) ── */
+  .login-atom {
+    position: absolute; pointer-events: none;
+    opacity: .18;
+  }
 </style>
 </head>
 <body>
 
+<!-- ── CANVAS BACKGROUND (atom rings) ── -->
+<canvas id="bg-canvas"></canvas>
+
+<!-- ── LOADING SCREEN ── -->
+<div id="loading-screen">
+  <div class="loading-inner">
+    <div class="atom-loader">
+      <div class="nucleus"></div>
+      <div class="orbit orbit-1"><div class="electron"></div></div>
+      <div class="orbit orbit-2"><div class="electron"></div></div>
+      <div class="orbit orbit-3"><div class="electron"></div></div>
+    </div>
+    <p id="loading-msg">Connecting to Discord...</p>
+  </div>
+</div>
+
 <!-- ── LOGIN SCREEN ── -->
-<div id="login-screen">
+<div id="login-screen" style="display:none">
   <div class="login-card">
     <div class="login-logo">⚡</div>
     <h1>Jiro Dashboard</h1>
@@ -956,68 +1057,74 @@
 
 <script>
 // ═══════════════════════════════════════════════
-//  CONFIG — update these to match your app
+//  CONFIG
 // ═══════════════════════════════════════════════
 const CONFIG = {
-  CLIENT_ID:     '1487252546060947476',
-  REDIRECT_URI:  window.location.origin + window.location.pathname,  // auto-detects GitHub Pages URL
-  API_BASE:      'https://hfxagwcwaalrmaqzhyfj.supabase.co',
-  SCOPES:        'identify guilds',
+  CLIENT_ID:    '1487252546060947476',
+  REDIRECT_URI:  window.location.origin + window.location.pathname,
+  API_BASE:     'https://hfxagwcwaalrmaqzhyfj.supabase.co',
+  SCOPES:       'identify guilds',
 };
 
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
 let state = {
-  user: null,
-  token: null,
-  guilds: [],
-  selectedGuild: null,
-  guildConfig: {},
-  channels: [],
-  roles: [],
-  badWords: [],
-  selfRoles: [],
-  levelRoles: {},
+  user: null, token: null, guilds: [],
+  selectedGuild: null, guildConfig: {},
+  channels: [], roles: [], badWords: [], selfRoles: [], levelRoles: {},
 };
 
 // ═══════════════════════════════════════════════
-//  OAUTH — discord-oauth edge function handles
-//  the code → token exchange server-side.
-//  bot_guilds edge function returns only guilds
-//  where both the user (admin) AND the bot exist.
+//  LOADING HELPERS
+// ═══════════════════════════════════════════════
+function setLoadingMsg(msg) {
+  const el = document.getElementById('loading-msg');
+  if (el) el.textContent = msg;
+}
+function hideLoading() {
+  const el = document.getElementById('loading-screen');
+  if (!el) return;
+  el.classList.add('fade-out');
+  setTimeout(() => { el.style.display = 'none'; }, 520);
+}
+function showLoading(msg = 'Loading...') {
+  const el = document.getElementById('loading-screen');
+  if (!el) return;
+  el.style.display = 'flex';
+  el.classList.remove('fade-out');
+  setLoadingMsg(msg);
+}
+
+// ═══════════════════════════════════════════════
+//  OAUTH
 // ═══════════════════════════════════════════════
 function startOAuth() {
   const oauthState = Math.random().toString(36).slice(2);
   sessionStorage.setItem('oauth_state', oauthState);
-
   const params = new URLSearchParams({
     client_id:     CONFIG.CLIENT_ID,
     redirect_uri:  CONFIG.REDIRECT_URI,
     response_type: 'code',
-    scope:         'identify guilds',
+    scope:         CONFIG.SCOPES,
     state:         oauthState,
-    prompt:        'none',   // skip re-consent if already authorized
+    prompt:        'none',
   });
   window.location.href = `https://discord.com/api/oauth2/authorize?${params}`;
 }
 
-async function handleOAuthCallback() {
-  const params        = new URLSearchParams(window.location.search);
-  const code          = params.get('code');
-  const returnedState = params.get('state');
-  const savedState    = sessionStorage.getItem('oauth_state');
-
-  if (!code) return false;
-
-  // CSRF guard
-  if (returnedState !== savedState) {
-    console.error('OAuth state mismatch');
+async function handleOAuthCallback(code, returnedState) {
+  const savedState = sessionStorage.getItem('oauth_state');
+  if (savedState && returnedState !== savedState) {
+    console.warn('OAuth state mismatch — ignoring');
+    // Don't hard-fail: clear and treat as fresh login
+    sessionStorage.removeItem('oauth_state');
     return false;
   }
 
+  setLoadingMsg('Exchanging auth code...');
+
   try {
-    // Hand the code to the discord-oauth Supabase edge function
     const res = await fetch(
       `${CONFIG.API_BASE}/functions/v1/discord-oauth`,
       {
@@ -1027,23 +1134,30 @@ async function handleOAuthCallback() {
       }
     );
 
+    // Always clean the URL regardless of success/fail so we never re-process
+    window.history.replaceState({}, document.title,
+      window.location.origin + window.location.pathname);
+    sessionStorage.removeItem('oauth_state');
+
     if (!res.ok) {
-      const err = await res.text();
-      console.error('discord-oauth error:', err);
+      console.error('discord-oauth edge fn returned', res.status, await res.text());
       return false;
     }
 
     const data = await res.json();
+    if (!data.access_token) {
+      console.error('No access_token in response', data);
+      return false;
+    }
 
-    // Persist token and clean ?code= from URL so refresh won't re-trigger
     localStorage.setItem('jiro_token', data.access_token);
-    sessionStorage.removeItem('oauth_state');
-    window.history.replaceState({}, document.title,
-      window.location.origin + window.location.pathname);
-
     return true;
   } catch (err) {
-    console.error('OAuth callback error:', err);
+    console.error('OAuth callback fetch error:', err);
+    // Still clean the URL so reload doesn't loop
+    window.history.replaceState({}, document.title,
+      window.location.origin + window.location.pathname);
+    sessionStorage.removeItem('oauth_state');
     return false;
   }
 }
@@ -1053,41 +1167,68 @@ function logout() {
   state = { user: null, token: null, guilds: [], selectedGuild: null,
             guildConfig: {}, channels: [], roles: [], badWords: [], selfRoles: [], levelRoles: {} };
   document.getElementById('app').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
+  showLogin();
 }
 
 // ═══════════════════════════════════════════════
-//  BOOT
+//  BOOT — called on DOMContentLoaded
 // ═══════════════════════════════════════════════
 async function boot() {
-  // 1. Handle OAuth redirect
-  if (window.location.search.includes('code=')) {
-    const ok = await handleOAuthCallback();
-    if (!ok) { showLogin(); return; }
+  showLoading('Connecting...');
+
+  const params = new URLSearchParams(window.location.search);
+  const code   = params.get('code');
+  const rState = params.get('state');
+
+  // 1. Handle OAuth redirect code
+  if (code) {
+    setLoadingMsg('Signing you in...');
+    const ok = await handleOAuthCallback(code, rState);
+    if (!ok) {
+      hideLoading();
+      showLogin();
+      return;
+    }
   }
 
-  // 2. Check stored token
+  // 2. Check for stored token
   const token = localStorage.getItem('jiro_token');
-  if (!token) { showLogin(); return; }
+  if (!token) {
+    hideLoading();
+    showLogin();
+    return;
+  }
   state.token = token;
 
-  // 3. Load user + guilds then show app
+  // 3. Load user identity
+  setLoadingMsg('Loading your profile...');
   try {
     await loadUser();
-    await loadGuilds();
-    showApp();
   } catch (err) {
-    console.error('Boot error:', err);
+    console.error('loadUser failed:', err);
     localStorage.removeItem('jiro_token');
+    hideLoading();
     showLogin();
+    return;
   }
+
+  // 4. Load guilds
+  setLoadingMsg('Fetching your servers...');
+  try {
+    await loadGuilds();
+  } catch (err) {
+    console.warn('loadGuilds failed (non-fatal):', err);
+    // Not fatal — show app with empty guild list
+  }
+
+  hideLoading();
+  showApp();
 }
 
 function showLogin() {
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
 }
-
 function showApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
@@ -1096,18 +1237,15 @@ function showApp() {
 // ═══════════════════════════════════════════════
 //  API HELPERS
 // ═══════════════════════════════════════════════
-
-// Discord API — user identity calls
 async function discordApi(path) {
   const res = await fetch(`https://discord.com/api/v10${path}`, {
     headers: { 'Authorization': `Bearer ${state.token}` },
   });
   if (res.status === 401) { logout(); throw new Error('Unauthorized'); }
-  if (!res.ok) throw new Error(`Discord API error ${res.status}`);
+  if (!res.ok) throw new Error(`Discord API ${res.status}`);
   return res.json();
 }
 
-// Supabase edge function / REST calls
 async function supabaseApi(path, opts = {}) {
   const res = await fetch(`${CONFIG.API_BASE}${path}`, {
     ...opts,
@@ -1119,29 +1257,26 @@ async function supabaseApi(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   if (res.status === 401) { logout(); throw new Error('Unauthorized'); }
-  if (!res.ok) throw new Error(`Supabase API error ${res.status}`);
+  if (!res.ok) throw new Error(`Supabase API ${res.status}`);
   return res.json();
 }
 
 async function loadUser() {
-  // Fetch the logged-in Discord user directly from Discord
   const data = await discordApi('/users/@me');
   state.user = data;
-  const initials = data.username ? data.username[0].toUpperCase() : '?';
-  document.getElementById('user-avatar-initial').textContent = initials;
-  document.getElementById('user-display-name').textContent   = data.global_name || data.username || 'Unknown';
-  document.getElementById('user-discriminator').textContent  = data.discriminator && data.discriminator !== '0'
-    ? `#${data.discriminator}` : '';
+  document.getElementById('user-avatar-initial').textContent =
+    data.username ? data.username[0].toUpperCase() : '?';
+  document.getElementById('user-display-name').textContent =
+    data.global_name || data.username || 'Unknown';
+  document.getElementById('user-discriminator').textContent =
+    data.discriminator && data.discriminator !== '0' ? `#${data.discriminator}` : '';
 }
 
 async function loadGuilds() {
-  // Call the bot_guilds edge function — returns only guilds where
-  // the user is an admin AND the bot is present
   const data = await supabaseApi('/functions/v1/bot_guilds', {
-    method:  'POST',
-    body:    { access_token: state.token },
+    method: 'POST',
+    body:   { access_token: state.token },
   });
-  // Supports both { guilds: [...] } and a bare array response
   state.guilds = Array.isArray(data) ? data : (data.guilds || []);
 }
 
@@ -1150,7 +1285,7 @@ async function selectGuild(guildId) {
   const guild = state.guilds.find(g => g.id === guildId);
   if (guild) {
     document.getElementById('guild-name-display').textContent = guild.name;
-    document.getElementById('guild-icon-text').textContent = guild.name[0].toUpperCase();
+    document.getElementById('guild-icon-text').textContent    = guild.name[0].toUpperCase();
   }
   try {
     const [config, channels, roles, badWords] = await Promise.all([
@@ -1160,39 +1295,33 @@ async function selectGuild(guildId) {
       supabaseApi('/functions/v1/bot_guilds', { method: 'POST', body: { action: 'badwords', guild_id: guildId, access_token: state.token } }),
     ]);
     state.guildConfig = config;
-    state.channels   = Array.isArray(channels) ? channels : (channels.channels || []);
-    state.roles      = Array.isArray(roles)    ? roles    : (roles.roles       || []);
-    state.badWords   = Array.isArray(badWords)  ? badWords : (badWords.words   || []);
-    state.selfRoles  = state.guildConfig.self_roles  || [];
-    state.levelRoles = state.guildConfig.level_roles || {};
+    state.channels    = Array.isArray(channels) ? channels : (channels.channels || []);
+    state.roles       = Array.isArray(roles)    ? roles    : (roles.roles       || []);
+    state.badWords    = Array.isArray(badWords)  ? badWords : (badWords.words   || []);
+    state.selfRoles   = state.guildConfig.self_roles  || [];
+    state.levelRoles  = state.guildConfig.level_roles || {};
     populateAll();
   } catch (err) {
     console.error('Failed to load guild data:', err);
-    // Demo fallback
     loadDemoData(guildId, guild);
   }
 }
 
 // ═══════════════════════════════════════════════
-//  DEMO DATA (when API isn't connected)
+//  DEMO DATA
 // ═══════════════════════════════════════════════
 function loadDemoData(guildId, guild) {
   state.channels = [
-    { id: '111', name: 'general' },
-    { id: '222', name: 'welcome' },
-    { id: '333', name: 'logs' },
-    { id: '444', name: 'mod-log' },
+    { id: '111', name: 'general' }, { id: '222', name: 'welcome' },
+    { id: '333', name: 'logs' },    { id: '444', name: 'mod-log' },
   ];
   state.roles = [
-    { id: '500', name: 'Member', color: '#7289DA' },
-    { id: '501', name: 'Moderator', color: '#F04747' },
-    { id: '502', name: 'Verified', color: '#43B581' },
-    { id: '503', name: 'Level 5', color: '#FAA61A' },
+    { id: '500', name: 'Member' }, { id: '501', name: 'Moderator' },
+    { id: '502', name: 'Verified' }, { id: '503', name: 'Level 5' },
   ];
   state.guildConfig = {
     automod_enabled: true, block_invites: true, block_links: false,
-    spam_limit: 5, spam_window: 5,
-    welcome_enabled: true, leave_enabled: true,
+    spam_limit: 5, spam_window: 5, welcome_enabled: true, leave_enabled: true,
     levels_enabled: true, ai_enabled: true, raid_mode: false,
     welcome_channel_id: '222', leave_channel_id: '222',
     log_channel: '333', mod_log_channel: '444',
@@ -1200,17 +1329,13 @@ function loadDemoData(guildId, guild) {
     leave_message: '{username} has left {server}. Goodbye!',
     ai_model: 'cyanix/axion-5-ensemble',
   };
-  state.badWords = ['badword1', 'example'];
-  state.selfRoles = ['502'];
+  state.badWords   = ['badword1', 'example'];
+  state.selfRoles  = ['502'];
   state.levelRoles = { '5': '503' };
-
-  // Stats
-  document.getElementById('stat-members').textContent = guild ? '1,234' : '—';
+  document.getElementById('stat-members').textContent  = '1,234';
   document.getElementById('stat-channels').textContent = '42';
-  document.getElementById('stat-roles').textContent = state.roles.length;
-  document.getElementById('stat-warns').textContent = '7';
-
-  // Recent logs
+  document.getElementById('stat-roles').textContent    = state.roles.length;
+  document.getElementById('stat-warns').textContent    = '7';
   document.getElementById('recent-log').innerHTML = `
     <tr><td><span class="badge badge-red">Ban</span></td><td>spammer#0001</td><td>2 mins ago</td></tr>
     <tr><td><span class="badge badge-yellow">Warn</span></td><td>user#1234</td><td>15 mins ago</td></tr>
@@ -1230,69 +1355,48 @@ function populateAll() {
   renderSelfRoles();
   renderLevelRoles();
 }
-
 function populateChannelSelects() {
-  const selects = ['welcome_channel_id','leave_channel_id','log_channel','mod_log_channel','lvl_channel','ai_channel'];
-  const opts = ['<option value="">— none —</option>', ...state.channels.map(c => `<option value="${c.id}">#${c.name}</option>`)].join('');
-  selects.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = opts;
-  });
+  const opts = ['<option value="">— none —</option>',
+    ...state.channels.map(c => `<option value="${c.id}">#${c.name}</option>`)].join('');
+  ['welcome_channel_id','leave_channel_id','log_channel','mod_log_channel','lvl_channel','ai_channel']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = opts; });
 }
-
 function populateRoleSelects() {
-  const selects = ['autorole_id','mod_role','admin_role','self-role-add','new-level-role'];
-  const opts = ['<option value="">— none —</option>', ...state.roles.map(r => `<option value="${r.id}">${r.name}</option>`)].join('');
-  selects.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = opts;
-  });
+  const opts = ['<option value="">— none —</option>',
+    ...state.roles.map(r => `<option value="${r.id}">${r.name}</option>`)].join('');
+  ['autorole_id','mod_role','admin_role','self-role-add','new-level-role']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = opts; });
 }
-
 function applyConfig() {
   const c = state.guildConfig;
-  // Toggles
   document.querySelectorAll('[data-key]').forEach(btn => {
     const key = btn.dataset.key;
-    if (key in c) {
-      btn.classList.toggle('on', !!c[key]);
-    }
+    if (key in c) btn.classList.toggle('on', !!c[key]);
   });
-  // Inputs / selects
   const map = {
-    welcome_channel_id: c.welcome_channel_id,
-    leave_channel_id: c.leave_channel_id,
-    welcome_message: c.welcome_message,
-    leave_message: c.leave_message,
-    log_channel: c.log_channel,
-    mod_log_channel: c.mod_log_channel,
-    spam_limit: c.spam_limit || 5,
-    spam_window: c.spam_window || 5,
-    raid_join_threshold: c.raid_join_threshold || 8,
-    raid_window_secs: c.raid_window_secs || 10,
-    raid_action: c.raid_action || 'kick',
-    mention_limit: c.mention_limit || 5,
-    mention_mute_mins: c.mention_mute_mins || 10,
-    ai_model: c.ai_model,
-    ai_system_prompt: c.ai_system_prompt,
-    ai_channel: c.ai_channel,
-    autorole_id: c.autorole_id,
-    xp_min: c.xp_min || 15,
-    xp_max: c.xp_max || 25,
-    xp_cooldown: c.xp_cooldown || 60,
+    welcome_channel_id: c.welcome_channel_id, leave_channel_id: c.leave_channel_id,
+    welcome_message: c.welcome_message, leave_message: c.leave_message,
+    log_channel: c.log_channel, mod_log_channel: c.mod_log_channel,
+    spam_limit: c.spam_limit||5, spam_window: c.spam_window||5,
+    raid_join_threshold: c.raid_join_threshold||8, raid_window_secs: c.raid_window_secs||10,
+    raid_action: c.raid_action||'kick', mention_limit: c.mention_limit||5,
+    mention_mute_mins: c.mention_mute_mins||10, ai_model: c.ai_model,
+    ai_system_prompt: c.ai_system_prompt, ai_channel: c.ai_channel,
+    autorole_id: c.autorole_id, xp_min: c.xp_min||15, xp_max: c.xp_max||25, xp_cooldown: c.xp_cooldown||60,
   };
   for (const [id, val] of Object.entries(map)) {
     const el = document.getElementById(id);
     if (el && val !== undefined && val !== null) el.value = val;
   }
-  // Slider display values
-  ['spam_limit','spam_window','raid_join_threshold','raid_window_secs','mention_limit','mention_mute_mins'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const valMap = { spam_limit:'spam_limit_val', spam_window:'spam_window_val', raid_join_threshold:'rtv', raid_window_secs:'rwv', mention_limit:'mlv', mention_mute_mins:'mmv' };
-    const disp = document.getElementById(valMap[id]);
-    if (disp) disp.textContent = el.value;
-  });
+  ['spam_limit','spam_window','raid_join_threshold','raid_window_secs','mention_limit','mention_mute_mins']
+    .forEach(id => {
+      const el = document.getElementById(id); if (!el) return;
+      const vm = { spam_limit:'spam_limit_val', spam_window:'spam_window_val',
+                   raid_join_threshold:'rtv', raid_window_secs:'rwv',
+                   mention_limit:'mlv', mention_mute_mins:'mmv' };
+      const d = document.getElementById(vm[id]);
+      if (d) d.textContent = el.value;
+    });
 }
 
 // ═══════════════════════════════════════════════
@@ -1302,20 +1406,21 @@ async function saveSection(section) {
   if (!state.selectedGuild) { showToast('⚠️ Select a server first!', 'warn'); return; }
   const updates = gatherSection(section);
   try {
-    await supabaseApi('/functions/v1/bot_guilds', { method: 'POST', body: { action: 'save_config', guild_id: state.selectedGuild, access_token: state.token, updates } });
+    await supabaseApi('/functions/v1/bot_guilds', {
+      method: 'POST',
+      body: { action: 'save_config', guild_id: state.selectedGuild, access_token: state.token, updates },
+    });
     Object.assign(state.guildConfig, updates);
     showToast('✅ Settings saved!');
   } catch {
-    // Demo mode — just simulate save
     Object.assign(state.guildConfig, updates);
-    showToast('✅ Settings saved! (demo mode)');
+    showToast('✅ Saved locally (demo mode)');
   }
 }
-
 function gatherSection(section) {
-  const g = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
-  const t = key => { const btn = document.querySelector(`[data-key="${key}"]`); return btn ? btn.classList.contains('on') : undefined; };
-  const sections = {
+  const g  = id  => { const el = document.getElementById(id); return el ? el.value : undefined; };
+  const t  = key => { const b  = document.querySelector(`[data-key="${key}"]`); return b ? b.classList.contains('on') : undefined; };
+  return ({
     welcome:     { welcome_enabled: t('welcome_enabled'), welcome_channel_id: g('welcome_channel_id'), welcome_message: g('welcome_message') },
     leave:       { leave_enabled: t('leave_enabled'), leave_channel_id: g('leave_channel_id'), leave_message: g('leave_message') },
     autorole:    { autorole_enabled: t('autorole_enabled'), autorole_id: g('autorole_id') },
@@ -1329,16 +1434,14 @@ function gatherSection(section) {
     ai:          { ai_enabled: t('ai_enabled'), ai_model: g('ai_model'), ai_system_prompt: g('ai_system_prompt'), ai_channel: g('ai_channel') },
     antiraid:    { auto_raid_detection: t('auto_raid_detection'), raid_join_threshold: parseInt(g('raid_join_threshold')), raid_window_secs: parseInt(g('raid_window_secs')), raid_action: g('raid_action') },
     mentions:    { mention_limit: parseInt(g('mention_limit')), mention_mute_mins: parseInt(g('mention_mute_mins')) },
-  };
-  return sections[section] || {};
+  })[section] || {};
 }
 
 // ═══════════════════════════════════════════════
 //  BAD WORDS
 // ═══════════════════════════════════════════════
 function renderBadWords() {
-  const list = document.getElementById('bad-words-list');
-  if (!list) return;
+  const list = document.getElementById('bad-words-list'); if (!list) return;
   list.innerHTML = state.badWords.length
     ? state.badWords.map(w => `<div class="tag">${w}<button class="tag-remove" onclick="removeBadWord('${w}')">×</button></div>`).join('')
     : '<span style="color:var(--muted);font-size:12px">No bad words configured.</span>';
@@ -1347,48 +1450,34 @@ function addBadWord() {
   const inp = document.getElementById('bad-word-input');
   const word = inp.value.trim().toLowerCase();
   if (!word || state.badWords.includes(word)) return;
-  state.badWords.push(word);
-  inp.value = '';
-  renderBadWords();
-  saveSection('automod');
+  state.badWords.push(word); inp.value = ''; renderBadWords(); saveSection('automod');
 }
-function removeBadWord(word) {
-  state.badWords = state.badWords.filter(w => w !== word);
-  renderBadWords();
-}
+function removeBadWord(word) { state.badWords = state.badWords.filter(w => w !== word); renderBadWords(); }
 
 // ═══════════════════════════════════════════════
 //  SELF ROLES
 // ═══════════════════════════════════════════════
 function renderSelfRoles() {
-  const list = document.getElementById('self-roles-list');
-  if (!list) return;
+  const list = document.getElementById('self-roles-list'); if (!list) return;
   list.innerHTML = state.selfRoles.length
     ? state.selfRoles.map(id => {
         const role = state.roles.find(r => r.id === id);
-        const name = role ? role.name : id;
-        return `<div class="tag" style="background:rgba(88,101,242,.1);border-color:rgba(88,101,242,.2);color:var(--accent)">${name}<button class="tag-remove" onclick="removeSelfRole('${id}')">×</button></div>`;
+        return `<div class="tag" style="background:rgba(88,101,242,.1);border-color:rgba(88,101,242,.2);color:var(--accent)">${role ? role.name : id}<button class="tag-remove" onclick="removeSelfRole('${id}')">×</button></div>`;
       }).join('')
     : '<span style="color:var(--muted);font-size:12px">No self-roles added.</span>';
 }
 function addSelfRole() {
   const sel = document.getElementById('self-role-add');
   if (!sel.value || state.selfRoles.includes(sel.value)) return;
-  state.selfRoles.push(sel.value);
-  sel.value = '';
-  renderSelfRoles();
+  state.selfRoles.push(sel.value); sel.value = ''; renderSelfRoles();
 }
-function removeSelfRole(id) {
-  state.selfRoles = state.selfRoles.filter(r => r !== id);
-  renderSelfRoles();
-}
+function removeSelfRole(id) { state.selfRoles = state.selfRoles.filter(r => r !== id); renderSelfRoles(); }
 
 // ═══════════════════════════════════════════════
 //  LEVEL ROLES
 // ═══════════════════════════════════════════════
 function renderLevelRoles() {
-  const list = document.getElementById('level-roles-list');
-  if (!list) return;
+  const list = document.getElementById('level-roles-list'); if (!list) return;
   const entries = Object.entries(state.levelRoles);
   list.innerHTML = entries.length
     ? entries.map(([lvl, roleId]) => {
@@ -1410,30 +1499,22 @@ function addLevelRole() {
   document.getElementById('new-level-role').value = '';
   renderLevelRoles();
 }
-function removeLevelRole(lvl) {
-  delete state.levelRoles[lvl];
-  renderLevelRoles();
-}
+function removeLevelRole(lvl) { delete state.levelRoles[lvl]; renderLevelRoles(); }
 
 // ═══════════════════════════════════════════════
 //  UI HELPERS
 // ═══════════════════════════════════════════════
-function toggleBtn(btn) {
-  btn.classList.toggle('on');
-}
+function toggleBtn(btn) { btn.classList.toggle('on'); }
 
 function navigate(page, el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   if (el) el.classList.add('active');
   const target = document.getElementById(`page-${page}`);
-  if (target) { target.classList.add('active'); }
+  if (target) target.classList.add('active');
   if (window.innerWidth < 900) document.getElementById('sidebar').classList.remove('open');
 }
-
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
-}
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
 
 let toastTimer;
 function showToast(msg, type = 'success') {
@@ -1444,28 +1525,136 @@ function showToast(msg, type = 'success') {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
 }
-
 function showGuildPicker() {
-  if (!state.guilds.length) {
-    showToast('⚠️ No guilds loaded', 'warn'); return;
-  }
-  // Simple inline guild picker prompt
-  const opts = state.guilds.map(g => `${g.name} (${g.id})`).join('\n');
-  const choice = prompt(`Your servers (paste the ID):\n\n${opts}`);
-  const guild = state.guilds.find(g => g.id === choice || g.name === choice);
+  if (!state.guilds.length) { showToast('⚠️ No guilds loaded', 'warn'); return; }
+  const opts   = state.guilds.map(g => `${g.name} (${g.id})`).join('\n');
+  const choice = prompt(`Your servers (paste the name or ID):\n\n${opts}`);
+  const guild  = state.guilds.find(g => g.id === choice || g.name === choice);
   if (guild) selectGuild(guild.id);
+}
+
+// ═══════════════════════════════════════════════
+//  CANVAS — ATOM RING BACKGROUND ANIMATION
+// ═══════════════════════════════════════════════
+function initCanvas() {
+  const canvas = document.getElementById('bg-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Define several atom systems scattered around the canvas
+  const atoms = [
+    { x: 0.12, y: 0.15, rings: [80, 130, 180], speed: [0.003, -0.002, 0.0015], color: [88,101,242] },
+    { x: 0.88, y: 0.75, rings: [60, 100, 145], speed: [0.0025, 0.004, -0.002],  color: [0,191,255]  },
+    { x: 0.75, y: 0.08, rings: [50, 85, 120],  speed: [-0.003, 0.002, 0.0035],  color: [167,139,250] },
+    { x: 0.05, y: 0.82, rings: [55, 90, 130],  speed: [0.004, -0.003, 0.002],   color: [0,191,255]  },
+    { x: 0.5,  y: 0.5,  rings: [70, 115, 160], speed: [-0.002, 0.003, -0.0015], color: [88,101,242] },
+  ];
+
+  // Each atom has angles for each ring
+  const angles = atoms.map(a => a.rings.map(() => Math.random() * Math.PI * 2));
+
+  function drawAtom(atom, anglesArr, alpha) {
+    const cx = atom.x * canvas.width;
+    const cy = atom.y * canvas.height;
+    const [r, g, b] = atom.color;
+
+    // Nucleus glow
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 8);
+    grad.addColorStop(0,   `rgba(${r},${g},${b},${alpha * 0.6})`);
+    grad.addColorStop(0.5, `rgba(${r},${g},${b},${alpha * 0.2})`);
+    grad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+    ctx.beginPath();
+    ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Rings + electrons
+    atom.rings.forEach((radius, i) => {
+      const angle = anglesArr[i];
+      // Ellipse ring (tilted)
+      const tilt = (i * Math.PI) / 3;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(tilt);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, radius, radius * 0.38, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.12})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Electron dot
+      const ex = Math.cos(angle) * radius;
+      const ey = Math.sin(angle) * radius * 0.38;
+      const eg = ctx.createRadialGradient(ex, ey, 0, ex, ey, 5);
+      eg.addColorStop(0,   `rgba(${r},${g},${b},${alpha * 0.9})`);
+      eg.addColorStop(0.5, `rgba(${r},${g},${b},${alpha * 0.4})`);
+      eg.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+      ctx.beginPath();
+      ctx.arc(ex, ey, 5, 0, Math.PI * 2);
+      ctx.fillStyle = eg;
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+
+  // Soft color wave overlay
+  let wave = 0;
+
+  function frame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    wave += 0.004;
+
+    // Soft pulsing radial gradients for ambient color
+    const pulse = 0.5 + 0.5 * Math.sin(wave);
+    const grad1 = ctx.createRadialGradient(
+      canvas.width * 0.15, canvas.height * 0.2, 0,
+      canvas.width * 0.15, canvas.height * 0.2, canvas.width * 0.45
+    );
+    grad1.addColorStop(0,   `rgba(88,101,242,${0.04 + pulse * 0.03})`);
+    grad1.addColorStop(1,   'rgba(88,101,242,0)');
+    ctx.fillStyle = grad1;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const grad2 = ctx.createRadialGradient(
+      canvas.width * 0.85, canvas.height * 0.75, 0,
+      canvas.width * 0.85, canvas.height * 0.75, canvas.width * 0.4
+    );
+    grad2.addColorStop(0,   `rgba(0,191,255,${0.03 + (1-pulse) * 0.025})`);
+    grad2.addColorStop(1,   'rgba(0,191,255,0)');
+    ctx.fillStyle = grad2;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Advance angles and draw atoms
+    atoms.forEach((atom, ai) => {
+      atom.rings.forEach((_, ri) => {
+        angles[ai][ri] += atom.speed[ri];
+      });
+      // Fade atoms at edges slightly
+      const edgeFade = Math.min(
+        atom.x, 1 - atom.x, atom.y, 1 - atom.y
+      ) * 6;
+      drawAtom(atom, angles[ai], Math.min(1, edgeFade) * 0.8);
+    });
+
+    requestAnimationFrame(frame);
+  }
+  frame();
 }
 
 // ═══════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
+  initCanvas();
   boot();
-
-  // Demo fallback: if OAuth isn't fully wired yet, show app with sample data on click
-  if (!window.location.search.includes('code=') && !localStorage.getItem('jiro_token')) {
-    document.querySelector('.discord-btn').addEventListener('click', () => {}, { once: true });
-  }
 });
 </script>
 </body>
